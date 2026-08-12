@@ -2,7 +2,7 @@
 
 ## Bare Metal IPI (Installer-Provisioned Infrastructure)
 
-**Version:** OpenShift 4.16  
+**Version:** OpenShift 4.22  
 **Date:** August 2026  
 **Author:** Platform Engineering Team
 
@@ -29,10 +29,11 @@ Red Hat OpenShift Container Platform supports multiple installation topologies. 
 ### 1.1 Installer-Provisioned Infrastructure (IPI)
 
 - The OpenShift installer provisions and manages the underlying infrastructure automatically.
-- Supported platforms: AWS, Azure, GCP, VMware vSphere, Bare Metal, OpenStack.
+- Supported platforms: AWS, Azure, GCP, VMware vSphere, Bare Metal, OpenStack, Nutanix.
 - The installer handles machine provisioning, OS installation, and cluster bootstrapping.
 - Best suited for environments where full automation of the infrastructure lifecycle is desired.
-- Bare metal IPI uses the Ironic provisioning service to manage server lifecycle via IPMI/BMC.
+- Bare metal IPI uses the Ironic provisioning service to manage server lifecycle via BMC (Redfish/IPMI).
+- As of OpenShift 4.22, Redfish is the preferred and default BMC protocol; IPMI remains supported but is considered legacy.
 
 ### 1.2 User-Provisioned Infrastructure (UPI)
 
@@ -43,10 +44,11 @@ Red Hat OpenShift Container Platform supports multiple installation topologies. 
 
 ### 1.3 Assisted Installer (AI)
 
-- A SaaS-based or on-premises service (via Assisted Installer Operator) that provides a guided, wizard-driven installation workflow.
+- A SaaS-based or on-premises service (via Assisted Installer Operator / Infrastructure Operator) that provides a guided, wizard-driven installation workflow.
 - Performs host discovery, validation checks, and generates ISOs for booting target nodes.
-- Supports bare metal, vSphere, and Nutanix environments.
+- Supports bare metal, vSphere, Nutanix, and external platform (platform: none) environments.
 - Well suited for smaller deployments, edge, and disconnected environments when paired with the on-premises variant.
+- In OpenShift 4.22, the Assisted Installer supports dual-stack networking, OVN-Kubernetes with IPsec, and static IP configurations natively.
 
 ### 1.4 Agent-Based Installer
 
@@ -55,12 +57,13 @@ Red Hat OpenShift Container Platform supports multiple installation topologies. 
 - Configuration is defined in YAML manifests (install-config.yaml and agent-config.yaml).
 - Ideal for air-gapped environments and edge deployments.
 
-### 1.5 Hosted Control Planes (HCP) / HyperShift
+### 1.5 Hosted Control Planes (HCP)
 
 - Control plane components run as pods on a management cluster rather than on dedicated machines.
 - Worker nodes are provisioned separately and join the hosted cluster.
-- Reduces infrastructure cost for the control plane and enables rapid cluster provisioning.
-- Currently supported on AWS, bare metal (with Agent), and KubeVirt.
+- Reduces infrastructure cost for the control plane and enables rapid cluster provisioning (sub-10-minute control planes).
+- GA on AWS, bare metal (with Agent provider), KubeVirt, and Azure.
+- In OpenShift 4.22, HCP is fully integrated into the MCE/ACM operator and supports automated node pool scaling, disconnected deployments, and custom machine CIDR configurations.
 
 ### 1.6 Single Node OpenShift (SNO)
 
@@ -94,8 +97,8 @@ Red Hat OpenShift Container Platform supports multiple installation topologies. 
 | Storage | OpenShift Data Foundation (ODF) backed by local NVMe/SSD devices |
 | Authentication | Integration with customer LDAP/Active Directory via OAuth |
 | Ingress | Default Ingress Controller with customer-provided wildcard certificate |
-| Monitoring | Default cluster monitoring stack (Prometheus, Alertmanager, Grafana) |
-| Logging | OpenShift Logging (Loki-based) forwarding to customer SIEM |
+| Monitoring | Default cluster monitoring stack (Prometheus, Alertmanager, cluster observability dashboards) |
+| Logging | Cluster Logging via ClusterLogForwarder (Vector-based collector) forwarding to customer SIEM |
 | Registry | Internal image registry backed by ODF PersistentVolume |
 | Sample workload | Deploy a sample application to validate the platform end-to-end |
 | Backup | OADP (OpenShift API for Data Protection) install and one backup/restore cycle |
@@ -106,7 +109,7 @@ Red Hat OpenShift Container Platform supports multiple installation topologies. 
 | Item | Rationale |
 |------|-----------|
 | Multi-cluster management (ACM) | Requires separate engagement; not part of initial platform validation |
-| Service mesh (Istio/Envoy) | Application-level concern; can be added post-POC |
+| Service mesh (Istio/Sail Operator) | Application-level concern; can be added post-POC |
 | Serverless (Knative) | Optional operator; evaluated after core platform is validated |
 | GPU/AI/ML workloads | Requires GPU operator and specific hardware; separate POC track |
 | Windows container support | Requires WMCO operator and Windows nodes; separate scope |
@@ -139,7 +142,7 @@ The POC is considered successful when the following criteria are met and demonst
 | 1 | All 3 control plane nodes are Running and Ready | `oc get nodes` shows all control plane nodes Ready |
 | 2 | All 3 worker nodes are Running and Ready | `oc get nodes` shows all worker nodes Ready |
 | 3 | All ClusterOperators report Available=True, Degraded=False | `oc get co` shows no degraded operators |
-| 4 | Cluster version matches target release (4.16.x) | `oc get clusterversion` confirms version |
+| 4 | Cluster version matches target release (4.22.x) | `oc get clusterversion` confirms version |
 
 ### 3.2 Networking
 
@@ -300,19 +303,19 @@ The provisioning host is the machine from which you run the installer. It must h
 
 | Resource | Requirement |
 |----------|-------------|
-| OS | RHEL 9.x or Fedora 38+ |
+| OS | RHEL 9.4+ or Fedora 40+ |
 | CPU | 4 cores |
 | RAM | 16 GB |
 | Disk | 100 GB free |
 | NICs | 2 (one on provisioning network, one on baremetal network) |
-| Packages | `podman`, `firewalld`, `ipmitool`, `nmcli` |
+| Packages | `podman`, `firewalld`, `ipmitool`, `nmcli`, `nmstate` |
 
 ```bash
 # Install required packages
-sudo dnf install -y podman firewalld ipmitool NetworkManager
+sudo dnf install -y podman firewalld ipmitool NetworkManager nmstate
 
 # Download the installer
-OCP_VERSION="4.16.10"
+OCP_VERSION="4.22.0"
 curl -L "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OCP_VERSION}/openshift-install-linux.tar.gz" \
   -o openshift-install-linux.tar.gz
 tar xvf openshift-install-linux.tar.gz
@@ -341,8 +344,7 @@ The following ports must be open between all cluster nodes and from the provisio
 | All nodes | All nodes | 9000-9999 | TCP | Host-level services |
 | All nodes | All nodes | 10250-10259 | TCP | Kubelet, kube-controller |
 | All nodes | All nodes | 30000-32767 | TCP | NodePort services |
-| All nodes | All nodes | 4789 | UDP | VXLAN (OVN) |
-| All nodes | All nodes | 6081 | UDP | Geneve (OVN) |
+| All nodes | All nodes | 6081 | UDP | Geneve (OVN-Kubernetes) |
 | All nodes | All nodes | 9000-9999 | UDP | Host-level services |
 | All nodes | All nodes | 500 | UDP | IPsec IKE |
 | All nodes | All nodes | 4500 | UDP | IPsec NAT-T |
@@ -428,7 +430,7 @@ nmcli connection up baremetal
 
 ### 5.4 OVN-Kubernetes CNI Configuration
 
-OVN-Kubernetes is the default CNI for OpenShift 4.16. The following parameters are set in `install-config.yaml`:
+OVN-Kubernetes is the sole supported CNI for OpenShift 4.22 (OpenShift SDN was removed in 4.17). The following parameters are set in `install-config.yaml`:
 
 | Parameter | Value |
 |-----------|-------|
@@ -494,7 +496,7 @@ metadata:
   name: odf-operator
   namespace: openshift-storage
 spec:
-  channel: stable-4.16
+  channel: stable-4.22
   installPlanApproval: Automatic
   name: odf-operator
   source: redhat-operators

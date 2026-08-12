@@ -12,7 +12,7 @@ additionalTrustBundle: |
   -----END CERTIFICATE-----
 
 # Image content sources (tells the cluster where to pull images)
-imageDigestSources:
+imageDigestMirrors:
   - mirrors:
       - registry.example.com:8443/openshift/release-images
     source: quay.io/openshift-release-dev/ocp-release
@@ -21,7 +21,7 @@ imageDigestSources:
     source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
 ```
 
-> **Note:** In OpenShift 4.22, `imageDigestSources` replaces the older `imageContentSources` field. Both are accepted, but `imageDigestSources` is preferred.
+> **Note:** In OpenShift 4.13+, `imageDigestMirrors` replaces the older `imageContentSources` field. Both are accepted, but `imageDigestMirrors` is preferred.
 
 ## Pull Secret
 

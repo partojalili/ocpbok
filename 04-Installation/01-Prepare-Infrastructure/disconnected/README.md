@@ -63,7 +63,7 @@ sudo mv oc-mirror /usr/local/bin/
 ### Create ImageSetConfiguration
 
 ```yaml
-apiVersion: mirror.openshift.io/v1alpha2
+apiVersion: mirror.openshift.io/v2alpha1
 kind: ImageSetConfiguration
 mirror:
   platform:

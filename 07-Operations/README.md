@@ -8,7 +8,7 @@ This is where the POC becomes meaningful.
 
 - Prometheus
 - Alertmanager
-- Grafana
+- Thanos (long-term metric storage and querying)
 - Cluster monitoring
 - Application monitoring
 
